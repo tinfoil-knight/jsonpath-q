@@ -1,0 +1,115 @@
+jsonpath_query = _{ SOI ~ root_identifier ~ segments ~ EOI }
+segments       =  { (S ~ segment)* }
+
+B = _{ " " | "\t" | "\n" | "\r\n" | "\r" }
+S = _{ B* }
+
+root_identifier = { "$" }
+selector        = {
+    name_selector
+  | wildcard_selector
+  | slice_selector
+  | index_selector // | filter_selector
+}
+
+name_selector = { string_literal }
+
+string_literal = _{
+    "\"" ~ double_quoted* ~ "\"" // ; "string"
+
+  | "'" ~ single_quoted* ~ "'" // ; 'string'
+}
+double_quoted  = _{
+    unescaped
+  | "'"
+  | (esc ~ "\"") // ; \"
+
+  | (esc ~ escapable)
+}
+single_quoted  = _{
+    unescaped
+  | "\""
+  | (esc ~ "'") // ; \'
+
+  | (esc ~ escapable)
+}
+
+esc = _{ "\\" }
+
+unescaped = _{
+    '\u{20}'..'\u{21}' // ; omit 0x22 "
+
+  | '\u{23}'..'\u{26}' // ; omit 0x27 '
+
+  | '\u{28}'..'\u{5B}' // ; omit 0x5C \
+
+  | '\u{5D}'..'\u{D7FF}' // ; skip surrogate code points
+
+  | '\u{E000}'..'\u{10FFFF}'
+}
+
+escapable = _{
+    "b" // ; \b for backspace
+
+  | "f" // ; \f for form feed
+
+  | "n" // ; \n for line feed
+
+  | "r" // ; \r for carriage return
+
+  | "t" // ; \t for horizontal tab
+
+  | "/" // ; for slash
+
+  | "\\" // ; for backslash
+
+  | ("u" ~ hexchar) // ; for unicode escape sequence uXXXX U+XXXX
+}
+
+hexchar        = { non_surrogate | (high_surrogate ~ "\\" ~ "u" ~ low_surrogate) }
+non_surrogate  = {
+    ((DIGIT | "A" | "B" | "C" | "E" | "F") ~ HEXDIG{3})
+  | ("D" ~ '\u{30}'..'\u{37}' ~ HEXDIG{2})
+}
+high_surrogate = { "D" ~ ("8" | "9" | "A" | "B") ~ HEXDIG{2} }
+low_surrogate  = { "D" ~ ("C" | "D" | "E" | "F") ~ HEXDIG{2} }
+HEXDIG         = { DIGIT | "A" | "B" | "C" | "D" | "E" | "F" }
+
+wildcard_selector = { "*" }
+
+index_selector =  { int }
+int            = @{ "0" | ("-"? ~ DIGIT1 ~ DIGIT*) }
+DIGIT1         =  { '1'..'9' }
+
+slice_selector = { (start ~ S)? ~ ":" ~ S ~ (end ~ S)? ~ (":" ~ (S ~ step)?)? }
+start          = { int }
+end            = { int }
+step           = { int }
+
+// TO ADD:
+// filter-selector
+// ..
+// function-argument
+
+segment               =  { child_segment | descendant_segment }
+child_segment         =  {
+    bracketed_selection
+  | ("." ~ (wildcard_selector | member_name_shorthand))
+}
+bracketed_selection   = _{ "[" ~ S ~ selector ~ (S ~ "," ~ S ~ selector)* ~ S ~ "]" }
+member_name_shorthand =  { name_first ~ name_char* }
+name_first            = _{
+    ALPHA
+  | "_"
+  | '\u{80}'..'\u{D7FF}' // skip surrogate code points
+
+  | '\u{E00}'..'\u{10FFFF}'
+}
+name_char             = _{ name_first | DIGIT }
+
+DIGIT = _{ '0'..'9' }
+ALPHA = _{ 'A'..'Z' | 'a'..'z' }
+
+descendant_segment = {
+    ".." ~ (bracketed_selection | wildcard_selector | member_name_shorthand)
+}
