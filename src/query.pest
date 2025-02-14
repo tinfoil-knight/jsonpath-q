@@ -1,11 +1,11 @@
-jsonpath_query = _{ SOI ~ root_identifier ~ segments ~ EOI }
-segments       =  { (S ~ segment)* }
+jsonpath_query = { SOI ~ root_identifier ~ segments ~ EOI }
+segments       = { (S ~ segment)* }
 
 B = _{ " " | "\t" | "\n" | "\r\n" | "\r" }
 S = _{ B* }
 
-root_identifier = { "$" }
-selector        = {
+root_identifier =  { "$" }
+selector        = _{
     name_selector
   | wildcard_selector
   | slice_selector

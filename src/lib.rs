@@ -1,9 +1,103 @@
+use pest::Parser;
 #[allow(unused_imports)]
 use pest_derive::Parser;
 
 #[derive(Parser)]
 #[grammar = "query.pest"]
 pub struct QueryParser;
+
+#[derive(Debug)]
+struct Segment {
+    kind: SegmentType,
+    selectors: Vec<Selector>,
+}
+
+#[derive(Debug)]
+enum SegmentType {
+    Child,
+    Descendant,
+}
+
+#[derive(Debug)]
+enum Selector {
+    Name(String),
+    Wildcard,
+    Index(isize),
+    /// start, end, step
+    Slice(Option<isize>, Option<isize>, Option<isize>),
+}
+
+fn parse_to_segments(query: &str) -> Result<Vec<Segment>, Box<dyn std::error::Error>> {
+    let parsed = QueryParser::parse(Rule::jsonpath_query, query)?
+        .next()
+        .unwrap();
+
+    assert_eq!(parsed.as_rule(), Rule::jsonpath_query);
+
+    let mut normalized_segments: Vec<Segment> = Vec::new();
+
+    for pair in parsed.into_inner() {
+        match pair.as_rule() {
+            Rule::root_identifier | Rule::EOI => {}
+            Rule::segments => {
+                let inner_rules = pair.into_inner();
+                for rule in inner_rules {
+                    assert_eq!(rule.as_rule(), Rule::segment);
+
+                    let segment = rule.into_inner().next().unwrap();
+
+                    let kind = match segment.as_rule() {
+                        Rule::child_segment => SegmentType::Child,
+                        Rule::descendant_segment => SegmentType::Descendant,
+                        _ => unreachable!(),
+                    };
+
+                    let selectors = segment
+                        .into_inner()
+                        .map(|s| match s.as_rule() {
+                            Rule::name_selector => Selector::Name(s.as_str().to_owned()),
+                            Rule::member_name_shorthand => Selector::Name(s.as_str().to_owned()),
+                            Rule::wildcard_selector => Selector::Wildcard,
+                            Rule::index_selector => {
+                                let inner_rule = s.into_inner().next().unwrap();
+                                Selector::Index(inner_rule.as_str().parse().unwrap())
+                            }
+                            Rule::slice_selector => {
+                                let (mut start, mut end, mut step) = (None, None, None);
+                                for pair in s.into_inner() {
+                                    let value = Some(pair.as_str().parse().unwrap());
+                                    match pair.as_rule() {
+                                        Rule::start => start = value,
+                                        Rule::end => end = value,
+                                        Rule::step => step = value,
+                                        _ => unreachable!(),
+                                    };
+                                }
+                                Selector::Slice(start, end, step)
+                            }
+                            _ => unreachable!(),
+                        })
+                        .collect();
+
+                    let normalized_segment = Segment { kind, selectors };
+                    normalized_segments.push(normalized_segment);
+                }
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    Ok(normalized_segments)
+}
+
+pub fn interpret_query(
+    _input: serde_json::Value,
+    query: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let segments = parse_to_segments(query);
+    println!("{segments:?}");
+    Ok(())
+}
 
 #[cfg(test)]
 mod tests {
