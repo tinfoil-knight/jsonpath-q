@@ -55,8 +55,9 @@ fn parse_to_segments(query: &str) -> Result<Vec<Segment>, Box<dyn std::error::Er
                     let selectors = segment
                         .into_inner()
                         .map(|s| match s.as_rule() {
-                            Rule::name_selector => Selector::Name(s.as_str().to_owned()),
-                            Rule::member_name_shorthand => Selector::Name(s.as_str().to_owned()),
+                            Rule::name_selector | Rule::member_name_shorthand => {
+                                Selector::Name(trim_quotes(s.as_str()))
+                            }
                             Rule::wildcard_selector => Selector::Wildcard,
                             Rule::index_selector => {
                                 let inner_rule = s.into_inner().next().unwrap();
@@ -97,6 +98,18 @@ pub fn interpret_query(
     let segments = parse_to_segments(query);
     println!("{segments:?}");
     Ok(())
+}
+
+fn trim_quotes(input: &str) -> String {
+    if let Some(stripped) = input
+        .strip_prefix('"')
+        .and_then(|s| s.strip_suffix('"'))
+        .or_else(|| input.strip_prefix('\'').and_then(|s| s.strip_suffix('\'')))
+    {
+        stripped.to_string()
+    } else {
+        input.to_string()
+    }
 }
 
 #[cfg(test)]
