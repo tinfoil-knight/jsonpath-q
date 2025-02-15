@@ -121,13 +121,13 @@ mod tests {
         use super::*;
 
         macro_rules! parses {
-            ($name:ident, $input:expr) => {
+            ($name:ident, $query:expr) => {
                 #[test]
                 fn $name() {
-                    let parsed = QueryParser::parse(Rule::jsonpath_query, $input);
-                    assert!(parsed.is_ok(), "Failed to parse: {}", $input);
+                    let parsed = QueryParser::parse(Rule::jsonpath_query, $query);
+                    assert!(parsed.is_ok(), "Failed to parse: {}", $query);
 
-                    println!("{}", $input);
+                    println!("{}", $query);
                     println!("{parsed:#?}");
                 }
             };
@@ -142,7 +142,7 @@ mod tests {
         // named selector
         parses!(named, "$.foo");
         parses!(named_nested, "$.foo['bar']");
-        parses!(named_further_nesting, "$.foo['bar baz']['k.k']");
+        parses!(named_nested_further, "$.foo['bar baz']['k.k']");
         parses!(named_diff_delimiter, r#"$.foo["bar baz"]["k.k"]"#);
         parses!(named_unusual, r#"$["'"]["@"]"#);
 
@@ -168,13 +168,13 @@ mod tests {
         use super::*;
 
         macro_rules! fails_to_parse {
-            ($name:ident, $input:expr) => {
+            ($name:ident, $query:expr) => {
                 #[test]
                 fn $name() {
-                    let parsed = QueryParser::parse(Rule::jsonpath_query, $input);
-                    assert!(parsed.is_err(), "Successfully parsed: {}", $input);
+                    let parsed = QueryParser::parse(Rule::jsonpath_query, $query);
+                    assert!(parsed.is_err(), "Successfully parsed: {}", $query);
 
-                    println!("{}", $input);
+                    println!("{}", $query);
                     println!("{parsed:#?}");
                 }
             };
