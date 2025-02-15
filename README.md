@@ -2,6 +2,12 @@
 
 A work-in-progress interpreter for JSONPath Query Expressions as described in [RFC 9535](https://www.rfc-editor.org/info/rfc9535).
 
+## Usage
+
+### Testing
+
+All tests are currently in `src/lib.rs`. To run them, use `cargo test`.
+
 ## Author
 
 - Kunal Kundu - [@tinfoil-knight](https://github.com/tinfoil-knight)
