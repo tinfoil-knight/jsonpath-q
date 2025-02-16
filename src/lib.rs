@@ -102,19 +102,27 @@ fn process_segment(input: Vec<Value>, segment: &Segment) -> Vec<serde_json::Valu
             segment
                 .selectors
                 .iter()
-                .flat_map(|selector| {
-                    match selector {
-                        Selector::Name(key) => item.get(key).cloned().into_iter().collect(),
-                        Selector::Index(idx) => {
-                            item.get(*idx as usize).cloned().into_iter().collect()
-                        } // todo: support -ve index
-                        Selector::Wildcard => match &item {
-                            Value::Array(values) => values.clone(),
-                            Value::Object(map) => map.values().cloned().collect(),
-                            _ => vec![],
-                        },
-                        Selector::Slice(_, _, _) => todo!(),
-                    }
+                .flat_map(|selector| match selector {
+                    Selector::Name(key) => item.get(key).cloned().into_iter().collect(),
+                    Selector::Index(idx) => match item.as_array() {
+                        Some(arr) if !arr.is_empty() => {
+                            let arr_idx = if *idx < 0 {
+                                arr.len()
+                                    .checked_sub(idx.unsigned_abs())
+                                    .unwrap_or(arr.len())
+                            } else {
+                                *idx as usize
+                            };
+                            item.get(arr_idx).cloned().into_iter().collect()
+                        }
+                        _ => vec![],
+                    },
+                    Selector::Wildcard => match &item {
+                        Value::Array(values) => values.clone(),
+                        Value::Object(map) => map.values().cloned().collect(),
+                        _ => vec![],
+                    },
+                    Selector::Slice(_, _, _) => todo!(),
                 })
                 .collect::<Vec<Value>>()
         })
@@ -346,5 +354,27 @@ mod tests {
         );
 
         interprets_to!(wildcard_for_array, INPUT_2, "$.a[*]", json_vec!([5, 3]));
+
+        // index selector
+
+        const INPUT_3: &str = r#"["a","b"]"#;
+
+        interprets_to!(index_positive, INPUT_3, "$[1]", vec![json!("b")]);
+
+        interprets_to!(index_negative, INPUT_3, "$[-2]", vec![json!("a")]);
+
+        interprets_to!(
+            index_positive_out_of_bound,
+            INPUT_3,
+            "$[2]",
+            Vec::<serde_json::Value>::new()
+        );
+
+        interprets_to!(
+            index_negative_out_of_bound,
+            INPUT_3,
+            "$[-3]",
+            Vec::<serde_json::Value>::new()
+        );
     }
 }
