@@ -4,6 +4,23 @@ A work-in-progress interpreter for JSONPath Query Expressions as described in [R
 
 ## Usage
 
+### Running
+
+Create a build using `cargo build --release` or use `cargo run`.
+
+```
+jsonpath-q -q <query> [-f <filepath>]
+```
+
+```
+Options:
+  -q, --query       query eg: "$['foo'].[1]"
+  -f, --filepath    filepath
+  --help, help      display usage information
+```
+
+> You can also stdin to provide input. Eg: `cat data.json | jsonpath-q -q <query>`.
+
 ### Testing
 
 All tests are currently in `src/lib.rs`. To run them, use `cargo test`.
