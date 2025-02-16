@@ -122,7 +122,60 @@ fn process_segment(input: Vec<Value>, segment: &Segment) -> Vec<serde_json::Valu
                         Value::Object(map) => map.values().cloned().collect(),
                         _ => vec![],
                     },
-                    Selector::Slice(_, _, _) => todo!(),
+                    Selector::Slice(start, end, step) => match item.as_array() {
+                        Some(arr) if !arr.is_empty() => {
+                            let step = step.unwrap_or(1);
+                            if step == 0 {
+                                return vec![];
+                            }
+
+                            let (start, end) = if step >= 0 {
+                                (start.unwrap_or(0), end.unwrap_or(arr.len() as isize))
+                            } else {
+                                (
+                                    start.unwrap_or((arr.len() - 1) as isize),
+                                    end.unwrap_or(-((arr.len() + 1) as isize)),
+                                )
+                            };
+
+                            let normalize =
+                                |i: isize, len: usize| if i >= 0 { i } else { len as isize + i };
+
+                            let bounds = |start: isize, end: isize, step: isize, len: isize| {
+                                let (n_start, n_end) =
+                                    (normalize(start, len as usize), normalize(end, len as usize));
+
+                                let (lower, upper) = if step >= 0 {
+                                    (n_start.max(0).min(len), n_end.max(0).min(len))
+                                } else {
+                                    (n_end.max(-1).min(len - 1), n_start.max(-1).min(len - 1))
+                                };
+
+                                (lower, upper)
+                            };
+
+                            let (lower, upper) = bounds(start, end, step, arr.len() as isize);
+
+                            let (lower, upper) = if step >= 0 {
+                                (lower as usize, upper as usize)
+                            } else {
+                                ((lower + 1) as usize, (upper + 1) as usize)
+                            };
+
+                            if upper < lower {
+                                return vec![];
+                            }
+
+                            let itr = arr[lower..upper].iter();
+
+                            if step >= 0 {
+                                itr.step_by(step as usize).cloned().collect()
+                            } else {
+                                itr.rev().step_by(step.unsigned_abs()).cloned().collect()
+                            }
+                        }
+                        _ => vec![],
+                    },
                 })
                 .collect::<Vec<Value>>()
         })
@@ -283,6 +336,8 @@ mod tests {
             };
         }
 
+        const EMPTY_VEC: Vec<serde_json::Value> = Vec::new();
+
         interprets_to!(only_root, r#"{"k": "v"}"#, "$", vec![json!({"k": "v"})]);
 
         // named selector
@@ -359,22 +414,94 @@ mod tests {
 
         const INPUT_3: &str = r#"["a","b"]"#;
 
-        interprets_to!(index_positive, INPUT_3, "$[1]", vec![json!("b")]);
+        interprets_to!(index_pos, INPUT_3, "$[1]", vec![json!("b")]);
 
-        interprets_to!(index_negative, INPUT_3, "$[-2]", vec![json!("a")]);
+        interprets_to!(index_neg, INPUT_3, "$[-2]", vec![json!("a")]);
+
+        interprets_to!(index_pos_out_of_bound, INPUT_3, "$[2]", EMPTY_VEC);
+
+        interprets_to!(index_neg_out_of_bound, INPUT_3, "$[-3]", EMPTY_VEC);
+
+        // slice selector
+
+        const INPUT_4: &str = r#"["a", "b", "c", "d", "e", "f", "g"]"#;
+
+        interprets_to!(slice_basic, INPUT_4, "$[1:3]", json_vec!(["b", "c"]));
+
+        interprets_to!(slice_pos_step, INPUT_4, "$[1:5:2]", json_vec!(["b", "d"]));
+
+        interprets_to!(slice_neg_step, INPUT_4, "$[5:1:-2]", json_vec!(["f", "d"]));
+
+        interprets_to!(slice_start_only, INPUT_4, "$[5:]", json_vec!(["f", "g"]));
+
+        interprets_to!(slice_end_only, INPUT_4, "$[:3]", json_vec!(["a", "b", "c"]));
 
         interprets_to!(
-            index_positive_out_of_bound,
-            INPUT_3,
-            "$[2]",
-            Vec::<serde_json::Value>::new()
+            slice_defaults,
+            INPUT_4,
+            "$[::]",
+            json_vec!(["a", "b", "c", "d", "e", "f", "g"])
+        );
+
+        interprets_to!(slice_empty_input, r#"[]"#, "$[1:3]", EMPTY_VEC);
+
+        interprets_to!(slice_zero_step, INPUT_4, "$[1:3:0]", EMPTY_VEC);
+
+        interprets_to!(
+            slice_reverse,
+            INPUT_4,
+            "$[::-1]",
+            json_vec!(["g", "f", "e", "d", "c", "b", "a"])
+        );
+
+        interprets_to!(slice_end_before_start, INPUT_4, "$[4:2]", EMPTY_VEC);
+
+        interprets_to!(
+            slice_neg_bounds,
+            INPUT_4,
+            "$[-4:-1]",
+            json_vec!(["d", "e", "f"])
+        );
+
+        interprets_to!(slice_out_of_bounds_pos, INPUT_4, "$[8:15]", EMPTY_VEC);
+
+        interprets_to!(slice_out_of_bounds_neg, INPUT_4, "$[-7:-9]", EMPTY_VEC);
+
+        interprets_to!(
+            slice_start_out_of_bound,
+            INPUT_4,
+            "$[-10:]",
+            json_vec!(["a", "b", "c", "d", "e", "f", "g"])
         );
 
         interprets_to!(
-            index_negative_out_of_bound,
-            INPUT_3,
-            "$[-3]",
-            Vec::<serde_json::Value>::new()
+            slice_end_out_of_bound,
+            INPUT_4,
+            "$[:10]",
+            json_vec!(["a", "b", "c", "d", "e", "f", "g"])
         );
+
+        interprets_to!(
+            slice_start_out_of_bound_end_in_bound,
+            INPUT_4,
+            "$[-10:-5]",
+            json_vec!(["a", "b"])
+        );
+
+        interprets_to!(
+            slice_start_in_bound_end_out_of_bound,
+            INPUT_4,
+            "$[5:10]",
+            json_vec!(["f", "g"])
+        );
+
+        interprets_to!(
+            slice_start_and_end_out_of_bound,
+            INPUT_4,
+            "$[-10:10]",
+            json_vec!(["a", "b", "c", "d", "e", "f", "g"])
+        );
+
+        interprets_to!(slice_same_start_end, INPUT_4, "$[2:2]", EMPTY_VEC);
     }
 }
