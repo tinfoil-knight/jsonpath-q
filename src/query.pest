@@ -9,7 +9,8 @@ selector        = _{
     name_selector
   | wildcard_selector
   | slice_selector
-  | index_selector // | filter_selector
+  | index_selector
+  | filter_selector
 }
 
 name_selector = { string_literal }
@@ -86,10 +87,47 @@ start          = { int }
 end            = { int }
 step           = { int }
 
-// TO ADD:
-// filter-selector
-// ..
-// function-argument
+filter_selector  = { "?" ~ S ~ logical_expr }
+logical_expr     = { logical_or_expr }
+logical_or_expr  = { logical_and_expr ~ (S ~ "||" ~ S ~ logical_and_expr)* }
+logical_and_expr = { basic_expr ~ (S ~ "&&" ~ S ~ basic_expr)* }
+
+basic_expr              = { paren_expr | comparison_expr | test_expr }
+paren_expr              = { (logical_not_op ~ S)? ~ "(" ~ S ~ logical_expr ~ S ~ ")" }
+logical_not_op          = { "!" }
+test_expr               = { (logical_not_op ~ S)? ~ (filter_query | function_expr) }
+filter_query            = { rel_query | jsonpath_query }
+rel_query               = { current_node_identifier ~ segments }
+current_node_identifier = { "@" }
+comparison_expr         = { comparable ~ S ~ comparison_op ~ S ~ comparable }
+literal                 = { number | string_literal | true | false | null }
+comparable              = { literal | singular_query | function_expr }
+comparison_op           = { "==" | "!=" | "<=" | ">=" | "<" | ">" }
+
+singular_query          =  { rel_singular_query | abs_singular_query }
+rel_singular_query      =  { current_node_identifier ~ singular_query_segments }
+abs_singular_query      =  { root_identifier ~ singular_query_segments }
+singular_query_segments =  { (S ~ (name_segment | index_segment))* }
+name_segment            =  { ("[" ~ name_selector ~ "]") | ("." ~ member_name_shorthand) }
+index_segment           =  { "[" ~ index_selector ~ "]" }
+number                  = @{ (int | "-0") ~ frac? ~ exp? }
+frac                    =  { "." ~ DIGIT{1, } }
+exp                     =  { ("e" | "E") ~ ("-" | "+")? ~ DIGIT{1, } }
+true                    =  { "true" }
+false                   =  { "false" }
+null                    =  { "null" }
+function_name           =  { function_name_first ~ (function_name_char)* }
+function_name_first     =  { LCALPHA }
+function_name_char      =  { function_name_first | "_" | DIGIT }
+LCALPHA                 =  { 'a'..'z' }
+
+function_expr     = { function_name ~ "(" ~ S ~ (function_argument ~ (S ~ "," ~ S ~ function_argument)*)? ~ S ~ ")" }
+function_argument = {
+    literal
+  | filter_query
+  | logical_expr
+  | function_expr
+}
 
 segment               =  { child_segment | descendant_segment }
 child_segment         =  {
